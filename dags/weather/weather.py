@@ -13,13 +13,20 @@ import os
 
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
-from dags.settings import LOCAL_TZ
-from dags.weather.utils import get_weather_data
 from datetime import datetime
+from settings import LOCAL_TZ
+from weather.utils import get_weather_data
 
 # -------------------- Globals -------------------- #
 DAG_ID = "weather"
 QUERIES_BASE_PATH = os.path.join(os.path.dirname(__file__), "queries")
+
+CITIES = [
+    "ciudad-de-mexico",
+    "merida",
+    "monterrey",
+    "wakanda",
+]
 
 with DAG(
     dag_id=DAG_ID,
@@ -38,12 +45,7 @@ with DAG(
         python_callable=get_weather_data,
         provide_context=True,
         op_kwargs={
-            "cities": [
-                "ciudad-de-mexico",
-                "merida",
-                "monterrey",
-                "wakanda",
-            ],
+            "cities": CITIES,
         },
     )
 
