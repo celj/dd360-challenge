@@ -34,11 +34,11 @@ with DAG(
         "weather",
     ],
 ):
-    # web_scraping = PythonOperator(
-    #     task_id="web_scraping",
-    #     python_callable=get_weather_data,
-    #     provide_context=True,
-    #     op_kwargs={},
-    # )
+    web_scraping = PythonOperator(
+        task_id="web_scraping",
+        python_callable=get_weather_data,
+        provide_context=True,
+        op_kwargs={},
+    )
 
     pass
