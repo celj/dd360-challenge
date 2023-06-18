@@ -9,13 +9,12 @@ Web scraping weather data.
 * Output:
 """
 
-import os
-
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from datetime import datetime
 from settings import LOCAL_TZ
 from weather.utils import get_weather_data
+import os
 
 # -------------------- Globals -------------------- #
 DAG_ID = "weather"
@@ -28,6 +27,14 @@ CITIES = [
     "wakanda",
 ]
 
+SPAN_ID_TAGS = {
+    "distance": "dist_cant",
+    "humidity": "ult_dato_hum",
+    "temperature": "ult_dato_temp",
+    "timestamp": "fecha_act_dato",
+}
+
+# -------------------- DAG -------------------- #
 with DAG(
     dag_id=DAG_ID,
     catchup=False,
@@ -46,7 +53,8 @@ with DAG(
         provide_context=True,
         op_kwargs={
             "cities": CITIES,
+            "span_id_tags": SPAN_ID_TAGS,
         },
     )
 
-    pass
+    web_scraping
