@@ -38,7 +38,14 @@ with DAG(
         task_id="web_scraping",
         python_callable=get_weather_data,
         provide_context=True,
-        op_kwargs={},
+        op_kwargs={
+            "cities": [
+                "ciudad-de-mexico",
+                "merida",
+                "monterrey",
+                "wakanda",
+            ],
+        },
     )
 
     pass
