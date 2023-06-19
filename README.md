@@ -92,6 +92,14 @@ This way, we can ensure that the code is readable and consistent. All settings a
 
 Additionally, all features were merged through dedicated branches to ensure that the `main` branch is always working as expected.
 
+## Results
+
+All output data is stored in the `docs/data` directory as csv files.
+
+> Note that `WEATHER.STAGING.SUMMARY` has `UPDATED_AT` as the first column, so the parquet is partitioned using this column. Thus, we only have one observation per city.
+
+Into the bargain, all the project instructions are saved in `docs/to-do.pdf` in Spanish.
+
 ## Next Steps
 
 Some ideas were already mentioned in the previous sections, but here is a list of possible next steps:
