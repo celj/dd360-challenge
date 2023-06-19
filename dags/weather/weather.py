@@ -15,7 +15,7 @@ from airflow.providers.snowflake.operators.snowflake import SnowflakeOperator
 from airflow.utils.task_group import TaskGroup
 from datetime import datetime
 from settings import LOCAL_TZ
-from weather.utils import get_weather_data, process_json
+from weather.utils import get_weather_data, process_json, to_parquet
 import os
 
 # -------------------- Globals -------------------- #
@@ -125,5 +125,17 @@ with DAG(
 
         fetch_requests >> successful_fetches >> summary
 
+    parquet_share = PythonOperator(
+        task_id="parquet_share",
+        python_callable=to_parquet,
+        provide_context=True,
+        op_kwargs={
+            "db": "weather",
+            "schema": "staging",
+            "snowflake_conn_id": SNOWFLAKE_CONN_ID,
+            "table_name": "summary",
+        },
+    )
+
     # -------------------- Dependencies -------------------- #
-    create >> upload_data >> process_data
+    create >> upload_data >> process_data >> parquet_share

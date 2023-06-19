@@ -4,8 +4,9 @@ Utils package for weather DAG.
 Constains utility functions for web scraping weather data.
 """
 
-from airflow.contrib.hooks.snowflake_hook import SnowflakeHook
+from tempfile import TemporaryDirectory
 from typing import List
+from utils import pandas_to_snowflake, snowflake_to_pandas
 import pandas as pd
 import re
 import requests
@@ -52,32 +53,6 @@ def get_weather_data(
     return info
 
 
-def upload_dataframe_sf(
-    df: pd.DataFrame,
-    db: str,
-    schema: str,
-    table_name: str,
-    chunk_size: int = 10_000,
-    snowflake_conn_id: str = "sf",
-):
-    """
-    Upload table to Snowflake.
-    """
-    snowflake_hook = SnowflakeHook(snowflake_conn_id=snowflake_conn_id)
-    snowflake_engine = snowflake_hook.get_sqlalchemy_engine()
-
-    with snowflake_engine.begin() as connection:
-        df.to_sql(
-            chunksize=chunk_size,
-            con=connection,
-            index=False,
-            method="multi",
-            name=table_name,
-            schema=f"{db}.{schema}",
-        )
-        snowflake_engine.dispose()
-
-
 def process_json(
     db: str,
     schema: str,
@@ -96,10 +71,41 @@ def process_json(
     df.reset_index(inplace=True)
     df.rename(columns={"index": "city_raw"}, inplace=True)
 
-    upload_dataframe_sf(
+    pandas_to_snowflake(
         df=df,
         db=db,
         schema=schema,
         table_name=table_name,
         snowflake_conn_id=snowflake_conn_id,
     )
+
+
+def to_parquet(
+    table_name,
+    schema,
+    db,
+    snowflake_conn_id="sf",
+):
+    """
+    Convert snowflake table to parquet.
+    """
+    df = snowflake_to_pandas(
+        query=f"SELECT * FROM {db}.{schema}.{table_name}",
+        snowflake_conn_id=snowflake_conn_id,
+    )
+
+    with TemporaryDirectory() as tmp_dir:
+        df.to_parquet(
+            f"{tmp_dir}/{table_name}.parquet",
+            compression=None,
+            engine="pyarrow",
+            index=False,
+            partition_cols=["UPDATED_AT"],
+        )
+
+        print(
+            pd.read_parquet(
+                f"{tmp_dir}/{table_name}.parquet",
+                engine="pyarrow",
+            )
+        )
