@@ -39,7 +39,7 @@ All code is located in the `dags` folder. The `settings` module establishes the 
 
 ## Web Scraping
 
-We may easily explore the front-end code of a website only by using the browser's developer tools. This way, we can find that all of required data were rendered through a span element as follows:
+We may easily explore the front-end code of a website only by using the browser's developer tools. We can find that all of required data was rendered through a span element as follows:
 
 ```html
 <span id="{tag}">{value}</span>
