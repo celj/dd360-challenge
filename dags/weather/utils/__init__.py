@@ -4,7 +4,9 @@ Utils package for weather DAG.
 Constains utility functions for web scraping weather data.
 """
 
+from airflow.contrib.hooks.snowflake_hook import SnowflakeHook
 from typing import List
+import pandas as pd
 import re
 import requests
 
@@ -21,10 +23,7 @@ def get_span_value(
         html,
     )
 
-    if match:
-        return match.group(1)
-    else:
-        return None
+    return match.group(1) if match else None
 
 
 def get_weather_data(
@@ -40,12 +39,70 @@ def get_weather_data(
         info[city] = {}
         response = requests.get(f"https://www.meteored.mx/{city}/historico")
         for tag, span_id in span_id_tags.items():
-            if response.status_code == 200:
-                info[city][tag] = get_span_value(
+            info[city][tag] = (
+                get_span_value(
                     html=response.text,
                     span_id=span_id,
                 )
-            else:
-                info[city][tag] = None
+                if response.status_code == 200
+                else None
+            )
+            info[city]["request_status"] = response.status_code
 
     return info
+
+
+def upload_dataframe_sf(
+    df: pd.DataFrame,
+    db: str,
+    schema: str,
+    table_name: str,
+    chunk_size: int = 10_000,
+    if_exists="replace",
+    snowflake_conn_id: str = "sf",
+):
+    """
+    Upload table to Snowflake.
+    """
+    snowflake_hook = SnowflakeHook(snowflake_conn_id=snowflake_conn_id)
+    snowflake_engine = snowflake_hook.get_sqlalchemy_engine()
+
+    with snowflake_engine.begin() as connection:
+        df.to_sql(
+            chunksize=chunk_size,
+            con=connection,
+            if_exists=if_exists,
+            index=False,
+            method="multi",
+            name=table_name,
+            schema=f"{db}.{schema}",
+        )
+        snowflake_engine.dispose()
+
+
+def process_json(
+    db: str,
+    schema: str,
+    table_name: str,
+    task_ids,
+    ti,
+    snowflake_conn_id: str = "sf",
+):
+    """
+    Process JSON data and upload to Snowflake.
+    """
+    data = ti.xcom_pull(task_ids=task_ids)
+    df = pd.DataFrame.from_dict(data, orient="index")
+    df["record_id"] = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+    df.reset_index(inplace=True)
+    df.rename(columns={"index": "city"}, inplace=True)
+
+    upload_dataframe_sf(
+        df=df,
+        db=db,
+        schema=schema,
+        table_name=table_name,
+        snowflake_conn_id=snowflake_conn_id,
+    )
+
+    print(df)

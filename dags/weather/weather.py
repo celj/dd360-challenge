@@ -11,9 +11,10 @@ Web scraping weather data.
 
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
+from airflow.providers.snowflake.operators.snowflake import SnowflakeOperator
 from datetime import datetime
 from settings import LOCAL_TZ
-from weather.utils import get_weather_data
+from weather.utils import get_weather_data, process_json
 import os
 
 # -------------------- Globals -------------------- #
@@ -31,7 +32,7 @@ SPAN_ID_TAGS = {
     "distance": "dist_cant",
     "humidity": "ult_dato_hum",
     "temperature": "ult_dato_temp",
-    "timestamp": "fecha_act_dato",
+    "updated_at": "fecha_act_dato",
 }
 
 # -------------------- DAG -------------------- #
@@ -47,6 +48,13 @@ with DAG(
         "weather",
     ],
 ):
+    # -------------------- Tasks -------------------- #
+    create_schemas = SnowflakeOperator(
+        task_id="create_schemas",
+        sql="create_schemas.sql",
+        snowflake_conn_id="sf",
+    )
+
     web_scraping = PythonOperator(
         task_id="web_scraping",
         python_callable=get_weather_data,
@@ -57,4 +65,23 @@ with DAG(
         },
     )
 
-    web_scraping
+    upload_to_sf = PythonOperator(
+        task_id="upload_to_sf",
+        python_callable=process_json,
+        provide_context=True,
+        op_kwargs={
+            "db": "weather",
+            "schema": "raw",
+            "snowflake_conn_id": "sf",
+            "table_name": "records_stg",
+            "task_ids": "web_scraping",
+        },
+    )
+
+    hist_insert = SnowflakeOperator(
+        task_id="hist_insert",
+        sql="hist_insert.sql",
+        snowflake_conn_id="sf",
+    )
+
+    create_schemas >> web_scraping >> upload_to_sf
