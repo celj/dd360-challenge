@@ -58,7 +58,6 @@ def upload_dataframe_sf(
     schema: str,
     table_name: str,
     chunk_size: int = 10_000,
-    if_exists="replace",
     snowflake_conn_id: str = "sf",
 ):
     """
@@ -71,7 +70,6 @@ def upload_dataframe_sf(
         df.to_sql(
             chunksize=chunk_size,
             con=connection,
-            if_exists=if_exists,
             index=False,
             method="multi",
             name=table_name,

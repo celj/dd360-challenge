@@ -12,6 +12,7 @@ Web scraping weather data.
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.providers.snowflake.operators.snowflake import SnowflakeOperator
+from airflow.utils.task_group import TaskGroup
 from datetime import datetime
 from settings import LOCAL_TZ
 from weather.utils import get_weather_data, process_json
@@ -49,39 +50,55 @@ with DAG(
     ],
 ):
     # -------------------- Tasks -------------------- #
-    create_schemas = SnowflakeOperator(
-        task_id="create_schemas",
-        sql="create_schemas.sql",
-        snowflake_conn_id="sf",
-    )
+    with TaskGroup(group_id="create") as create:
+        create_schemas = SnowflakeOperator(
+            snowflake_conn_id="sf",
+            sql="create_schemas.sql",
+            task_id="create_schemas",
+        )
 
-    web_scraping = PythonOperator(
-        task_id="web_scraping",
-        python_callable=get_weather_data,
-        provide_context=True,
-        op_kwargs={
-            "cities": CITIES,
-            "span_id_tags": SPAN_ID_TAGS,
-        },
-    )
+        create_cities = SnowflakeOperator(
+            snowflake_conn_id="sf",
+            sql="create_cities.sql",
+            task_id="create_cities",
+        )
+    with TaskGroup(group_id="upload_data") as upload_data:
+        web_scraping = PythonOperator(
+            task_id="web_scraping",
+            python_callable=get_weather_data,
+            provide_context=True,
+            op_kwargs={
+                "cities": CITIES,
+                "span_id_tags": SPAN_ID_TAGS,
+            },
+        )
 
-    upload_to_sf = PythonOperator(
-        task_id="upload_to_sf",
-        python_callable=process_json,
-        provide_context=True,
-        op_kwargs={
-            "db": "weather",
-            "schema": "raw",
-            "snowflake_conn_id": "sf",
-            "table_name": "records_stg",
-            "task_ids": "web_scraping",
-        },
-    )
+        upload_to_sf = PythonOperator(
+            task_id="upload_to_sf",
+            python_callable=process_json,
+            provide_context=True,
+            op_kwargs={
+                "db": "weather",
+                "schema": "raw",
+                "snowflake_conn_id": "sf",
+                "table_name": "records_tmp",
+                "task_ids": "web_scraping",
+            },
+        )
 
-    hist_insert = SnowflakeOperator(
-        task_id="hist_insert",
-        sql="hist_insert.sql",
-        snowflake_conn_id="sf",
-    )
+        hist_insert = SnowflakeOperator(
+            snowflake_conn_id="sf",
+            sql="hist_insert.sql",
+            task_id="hist_insert",
+        )
 
-    create_schemas >> web_scraping >> upload_to_sf
+        drop_tmp = SnowflakeOperator(
+            snowflake_conn_id="sf",
+            sql="drop_tmp.sql",
+            task_id="drop_tmp",
+        )
+
+        web_scraping >> upload_to_sf >> hist_insert >> drop_tmp
+
+    # -------------------- Dependencies -------------------- #
+    create >> upload_data
