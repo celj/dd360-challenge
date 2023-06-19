@@ -91,9 +91,10 @@ def process_json(
     """
     data = ti.xcom_pull(task_ids=task_ids)
     df = pd.DataFrame.from_dict(data, orient="index")
+
     df["record_id"] = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     df.reset_index(inplace=True)
-    df.rename(columns={"index": "city"}, inplace=True)
+    df.rename(columns={"index": "city_raw"}, inplace=True)
 
     upload_dataframe_sf(
         df=df,
@@ -102,5 +103,3 @@ def process_json(
         table_name=table_name,
         snowflake_conn_id=snowflake_conn_id,
     )
-
-    print(df)

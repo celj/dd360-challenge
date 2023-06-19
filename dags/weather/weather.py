@@ -21,6 +21,7 @@ import os
 # -------------------- Globals -------------------- #
 DAG_ID = "weather"
 QUERIES_BASE_PATH = os.path.join(os.path.dirname(__file__), "queries")
+SNOWFLAKE_CONN_ID = "sf"
 
 CITIES = [
     "ciudad-de-mexico",
@@ -52,16 +53,19 @@ with DAG(
     # -------------------- Tasks -------------------- #
     with TaskGroup(group_id="create") as create:
         create_schemas = SnowflakeOperator(
-            snowflake_conn_id="sf",
+            snowflake_conn_id=SNOWFLAKE_CONN_ID,
             sql="create_schemas.sql",
             task_id="create_schemas",
         )
 
         create_cities = SnowflakeOperator(
-            snowflake_conn_id="sf",
+            snowflake_conn_id=SNOWFLAKE_CONN_ID,
             sql="create_cities.sql",
             task_id="create_cities",
         )
+
+        create_schemas >> create_cities
+
     with TaskGroup(group_id="upload_data") as upload_data:
         web_scraping = PythonOperator(
             task_id="web_scraping",
@@ -80,25 +84,46 @@ with DAG(
             op_kwargs={
                 "db": "weather",
                 "schema": "raw",
-                "snowflake_conn_id": "sf",
+                "snowflake_conn_id": SNOWFLAKE_CONN_ID,
                 "table_name": "records_tmp",
-                "task_ids": "web_scraping",
+                "task_ids": "upload_data.web_scraping",
             },
         )
 
         hist_insert = SnowflakeOperator(
-            snowflake_conn_id="sf",
+            snowflake_conn_id=SNOWFLAKE_CONN_ID,
             sql="hist_insert.sql",
             task_id="hist_insert",
         )
 
         drop_tmp = SnowflakeOperator(
-            snowflake_conn_id="sf",
+            snowflake_conn_id=SNOWFLAKE_CONN_ID,
             sql="drop_tmp.sql",
             task_id="drop_tmp",
         )
 
         web_scraping >> upload_to_sf >> hist_insert >> drop_tmp
 
+    with TaskGroup(group_id="process_data") as process_data:
+        fetch_requests = SnowflakeOperator(
+            snowflake_conn_id=SNOWFLAKE_CONN_ID,
+            sql="fetch_requests.sql",
+            task_id="fetch_requests",
+        )
+
+        successful_fetches = SnowflakeOperator(
+            snowflake_conn_id=SNOWFLAKE_CONN_ID,
+            sql="successful_fetches.sql",
+            task_id="successful_fetches",
+        )
+
+        summary = SnowflakeOperator(
+            snowflake_conn_id=SNOWFLAKE_CONN_ID,
+            sql="summary.sql",
+            task_id="summary",
+        )
+
+        fetch_requests >> successful_fetches >> summary
+
     # -------------------- Dependencies -------------------- #
-    create >> upload_data
+    create >> upload_data >> process_data
